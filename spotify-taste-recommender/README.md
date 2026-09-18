@@ -20,6 +20,7 @@ The interesting part of this project isn't the recommender math — cosine simil
 6. It explains *why* each track was recommended (which audio features it's closest to, whether the genre matches your listening).
 7. You can also describe a mood or moment in plain English ("something moody for a rainy commute") and it'll blend that onto your taste profile rather than replacing it — an LLM only translates the request into structured audio-feature targets, it never picks songs itself (see [Mood search](#mood-search)).
 8. It evaluates itself: leave-one-artist-out testing checks whether an artist you demonstrably like would have been rediscovered from your *other* listening, compared against a random-chance baseline.
+9. Any list of recommendations — from your taste profile, a mood search, or a seed track — can be saved as a real playlist on your Spotify account in one click.
 
 ## How the pipeline actually works
 
@@ -65,7 +66,8 @@ This is an optional feature — it needs an `ANTHROPIC_API_KEY` with available c
 taste_engine/
   catalog.py       # loads + cleans the public audio-feature catalog, artist-level fallback table,
                     # feature standardization (z-scoring)
-  spotify_client.py# OAuth + pulls real listening history via endpoints still open to new apps
+  spotify_client.py# OAuth + pulls real listening history via endpoints still open to new apps;
+                    # also creates/fills a playlist from a list of recommended track IDs
   features.py      # joins user tracks -> catalog (exact match -> name/artist match -> artist-level fallback)
   profile.py        # builds the weighted taste profile (feature centroid + genre distribution)
   recommend.py      # cosine-similarity ranking, genre bonus, diversity cap, explanations

@@ -11,7 +11,10 @@ import pandas as pd
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-SCOPES = "user-top-read user-read-recently-played user-library-read playlist-read-private"
+SCOPES = (
+    "user-top-read user-read-recently-played user-library-read "
+    "playlist-read-private playlist-modify-private playlist-modify-public"
+)
 
 TOP_TRACKS_TIME_RANGES = {
     "short_term": "top_tracks_short_term",
@@ -102,6 +105,24 @@ def fetch_playlist_tracks(sp: spotipy.Spotify, max_playlists: int = 20) -> pd.Da
             if len(items) < 100:
                 break
     return pd.DataFrame(rows)
+
+
+def create_playlist_from_tracks(
+    sp: spotipy.Spotify,
+    user_id: str,
+    name: str,
+    track_ids: list[str],
+    public: bool = False,
+    description: str = "",
+) -> dict:
+    """Create a playlist on the user's account and fill it with the given
+    tracks, in order. Returns the created playlist object (has 'id' and
+    'external_urls'['spotify'])."""
+    playlist = sp.user_playlist_create(
+        user=user_id, name=name, public=public, description=description
+    )
+    sp.playlist_add_items(playlist["id"], [f"spotify:track:{tid}" for tid in track_ids])
+    return playlist
 
 
 def fetch_all_listening_history(sp: spotipy.Spotify) -> pd.DataFrame:

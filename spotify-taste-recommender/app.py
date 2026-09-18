@@ -25,7 +25,7 @@ from taste_engine.recommend import (
     recommend_from_profile,
     recommend_from_seed,
 )
-from taste_engine.spotify_client import SCOPES, fetch_all_listening_history
+from taste_engine.spotify_client import SCOPES, create_playlist_from_tracks, fetch_all_listening_history
 
 st.set_page_config(page_title="Your Spotify Taste, Mapped", page_icon="🎧", layout="wide")
 
@@ -142,7 +142,27 @@ def render_profile(me, joined, profile):
         st.plotly_chart(fig2, use_container_width=True)
 
 
-def render_recommendations(catalog, feature_stats, profile, known_ids):
+def render_save_as_playlist(sp, me, recs: pd.DataFrame, key: str, default_name: str):
+    if recs.empty:
+        return
+    with st.expander(f"💾 Save these {len(recs)} tracks as a Spotify playlist"):
+        name = st.text_input("Playlist name", value=default_name, key=f"{key}_name")
+        public = st.checkbox("Make it public", value=False, key=f"{key}_public")
+        if st.button("Create playlist", key=f"{key}_create"):
+            with st.spinner("Creating playlist on your account..."):
+                playlist = create_playlist_from_tracks(
+                    sp,
+                    me["id"],
+                    name,
+                    recs["track_id"].tolist(),
+                    public=public,
+                    description="Created by Your Spotify Taste, Mapped",
+                )
+            st.success(f"Created **{name}** with {len(recs)} tracks.")
+            st.link_button("Open in Spotify", playlist["external_urls"]["spotify"])
+
+
+def render_recommendations(sp, me, catalog, feature_stats, profile, known_ids):
     st.subheader("Recommended for you")
     n = st.slider("How many recommendations?", 5, 40, 15)
     recs = recommend_from_profile(catalog, feature_stats, profile, known_track_ids=known_ids, n=n)
@@ -153,9 +173,10 @@ def render_recommendations(catalog, feature_stats, profile, known_ids):
         with st.container(border=True):
             st.markdown(f"**{row['track_name']}** — {row['primary_artist']}  \n*{row['track_genre']}*")
             st.caption(explain_recommendation(row, profile, feature_stats))
+    render_save_as_playlist(sp, me, recs, key="for_you", default_name="Your Taste, Mapped")
 
 
-def render_mood_search(catalog, feature_stats, profile, known_ids):
+def render_mood_search(sp, me, catalog, feature_stats, profile, known_ids):
     st.subheader("Or: describe a mood or moment")
     st.caption(
         "e.g. \"something moody for a rainy commute\" or \"hype for a workout\" - "
@@ -180,21 +201,36 @@ def render_mood_search(catalog, feature_stats, profile, known_ids):
     if st.button("Find tracks for this mood"):
         with st.spinner("Interpreting your mood..."):
             mood = interpret_mood_query(query)
-        if mood.interpretation:
-            st.caption(f"🧭 {mood.interpretation}")
         target_vector, target_genres = apply_mood_to_profile(profile, mood, strength=strength)
         recs = recommend_from_mood(
             catalog, feature_stats, target_vector, target_genres, known_track_ids=known_ids, n=15
         )
-        if recs.empty:
-            st.info("Couldn't find confident recommendations for that mood.")
-            return
-        for _, row in recs.iterrows():
-            with st.container(border=True):
-                st.markdown(f"**{row['track_name']}** — {row['primary_artist']}  \n*{row['track_genre']}*")
+        # Stashed in session_state, not shown inline: this whole block only runs True on
+        # the exact rerun the button was clicked. The "Create playlist" button below
+        # triggers its own rerun, which would otherwise wipe these results before it
+        # could act on them.
+        st.session_state.mood_results = {
+            "interpretation": mood.interpretation,
+            "recs": recs,
+            "query": query,
+        }
+
+    results = st.session_state.get("mood_results")
+    if not results:
+        return
+    if results["interpretation"]:
+        st.caption(f"🧭 {results['interpretation']}")
+    recs = results["recs"]
+    if recs.empty:
+        st.info("Couldn't find confident recommendations for that mood.")
+        return
+    for _, row in recs.iterrows():
+        with st.container(border=True):
+            st.markdown(f"**{row['track_name']}** — {row['primary_artist']}  \n*{row['track_genre']}*")
+    render_save_as_playlist(sp, me, recs, key="mood", default_name=f"Mood: {results['query']}"[:100])
 
 
-def render_seed_search(sp, catalog, feature_stats, known_ids):
+def render_seed_search(sp, me, catalog, feature_stats, known_ids):
     st.subheader("Or: recommend from a specific song")
     query = st.text_input("Search a track (e.g. 'Travis Scott Fein')")
     if not query:
@@ -221,6 +257,7 @@ def render_seed_search(sp, catalog, feature_stats, known_ids):
     for _, row in recs.iterrows():
         with st.container(border=True):
             st.markdown(f"**{row['track_name']}** — {row['primary_artist']}  \n*{row['track_genre']}*")
+    render_save_as_playlist(sp, me, recs, key="seed", default_name=f"Because you like {seed_track['name']}"[:100])
 
 
 def render_evaluation(joined, catalog, feature_stats, artist_table):
@@ -259,11 +296,11 @@ def main():
     st.divider()
     tab1, tab2, tab3 = st.tabs(["For you", "From a song", "By mood"])
     with tab1:
-        render_recommendations(catalog, feature_stats, profile, known_ids)
+        render_recommendations(sp, me, catalog, feature_stats, profile, known_ids)
     with tab2:
-        render_seed_search(sp, catalog, feature_stats, known_ids)
+        render_seed_search(sp, me, catalog, feature_stats, known_ids)
     with tab3:
-        render_mood_search(catalog, feature_stats, profile, known_ids)
+        render_mood_search(sp, me, catalog, feature_stats, profile, known_ids)
     st.divider()
     render_evaluation(joined, catalog, feature_stats, artist_table)
 
