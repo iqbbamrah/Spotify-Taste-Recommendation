@@ -109,17 +109,22 @@ def fetch_playlist_tracks(sp: spotipy.Spotify, max_playlists: int = 20) -> pd.Da
 
 def create_playlist_from_tracks(
     sp: spotipy.Spotify,
-    user_id: str,
     name: str,
     track_ids: list[str],
     public: bool = False,
     description: str = "",
 ) -> dict:
-    """Create a playlist on the user's account and fill it with the given
-    tracks, in order. Returns the created playlist object (has 'id' and
-    'external_urls'['spotify'])."""
-    playlist = sp.user_playlist_create(
-        user=user_id, name=name, public=public, description=description
+    """Create a playlist on the current user's account and fill it with the
+    given tracks, in order. Returns the created playlist object (has 'id'
+    and 'external_urls'['spotify']).
+
+    Uses current_user_playlist_create (POST /me/playlists), not the older
+    user_playlist_create (POST /users/{user_id}/playlists) - Spotify's
+    February 2026 Web API migration removed the latter, which now returns
+    a bare 403 for every caller regardless of scope.
+    """
+    playlist = sp.current_user_playlist_create(
+        name=name, public=public, description=description
     )
     sp.playlist_add_items(playlist["id"], [f"spotify:track:{tid}" for tid in track_ids])
     return playlist
