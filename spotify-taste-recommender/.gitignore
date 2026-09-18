@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+data/raw/
+data/processed/
+*.sqlite
+*.db
+.streamlit/secrets.toml
+.pytest_cache/
+*.egg-info/
+.ipynb_checkpoints/
+.spotify_token_cache
+.claude/
