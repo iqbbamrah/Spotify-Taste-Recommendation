@@ -4,7 +4,7 @@
 
 Build a content-based music recommender on **real** Spotify listening history, not a demo dataset, that recommends real songs you don't already have, explains each pick, and can answer *"how do you know this works?"* with an actual evaluation.
 
-The hard part isn't the recommender math (cosine similarity over audio features is standard); it's the data. **Spotify closed its Audio Features, Recommendations, Related Artists, and Artist-Top-Tracks endpoints to new developer apps in late 2024.** I confirmed this empirically: those endpoints return `403 Forbidden` for a new app, and even artist objects come back with `genres` and `popularity` stripped. That rules out the obvious approach of calling Spotify for audio features, so they have to come from somewhere else.
+The hard part isn't the recommender math (cosine similarity over audio features is standard). It's the data. **Spotify closed its Audio Features, Recommendations, Related Artists, and Artist-Top-Tracks endpoints to new developer apps in late 2024.** I confirmed this empirically: those endpoints return `403 Forbidden` for a new app, and even artist objects come back with `genres` and `popularity` stripped. That rules out the obvious approach of calling Spotify for audio features, so they have to come from somewhere else.
 
 ## Data
 
@@ -15,7 +15,7 @@ The hard part isn't the recommender math (cosine similarity over audio features 
 ## Methodology
 
 - **Matching with an artist-level fallback:** tracks are matched to the catalog by exact track, then by name/artist, and finally by a per-artist average audio-feature profile (crediting every collaborator on a track). The artist fallback is what makes the rest of the pipeline viable.
-- **Taste profile:** a weighted centroid over 9 standardized audio-feature dimensions plus a normalized genre distribution. Saved tracks and short-term top tracks count fully; long-term top tracks and playlist tracks count somewhat less; recently played counts least, since it includes background listening, shuffle, and skips.
+- **Taste profile:** a weighted centroid over 9 standardized audio-feature dimensions plus a normalized genre distribution. Saved tracks and short-term top tracks count fully, long-term top tracks and playlist tracks count somewhat less, and recently played counts least, since it includes background listening, shuffle, and skips.
 - **Recommending:** rank the ~77K candidate catalog by cosine similarity to the taste centroid, add a genre bonus *scaled by how much that genre matters in your profile*, filter out tracks you already have, and cap picks per artist for diversity. Each recommendation is explained by the audio features closest to your profile, compared in the same standardized space the model uses.
 - **Evaluation (offline):** leave-one-artist-out. For every artist you demonstrably like, rebuild the profile *without* them and check whether their other tracks land back in the top-K recommendations. Reported as hit-rate@K, precision@K, recall@K, and NDCG@K against a random baseline (K / candidate pool size). The genre-bonus weight was chosen by sweeping values against this harness, not by eyeballing output.
 - **Mood search:** free-text requests ("something moody for a rainy commute") are mapped by an LLM (Claude, via a forced tool call) onto structured audio-feature targets and genre hints, which are blended onto your taste profile and ranked by the same scorer. The LLM never sees the catalog or picks songs, and its output is treated as untrusted: types are validated, values clamped, and genre hints capped, so a malformed response degrades to "ignore the mood."
@@ -38,7 +38,7 @@ The hard part isn't the recommender math (cosine similarity over audio features 
 ## How to run
 
 1. Create a free app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) with **Web API** checked and the Redirect URI set to `http://127.0.0.1:8501` (Spotify requires the literal `127.0.0.1`, not `localhost`).
-2. Copy `.env.example` to `.env` and fill in your Client ID and Secret. Optionally add an `ANTHROPIC_API_KEY` to enable mood search; everything else works without it.
+2. Copy `.env.example` to `.env` and fill in your Client ID and Secret. Optionally add an `ANTHROPIC_API_KEY` to enable mood search. Everything else works without it.
 3. From this folder:
    ```bash
    python -m venv .venv

@@ -21,7 +21,7 @@ Two independent projects built on Spotify data, kept in one repo because they sh
 
 | Project | Headline result |
 |---|---|
-| Recommender | Catalog match rate raised from 3.5% to 61.7% of real listening history; hit-rate@20 of ~3.6% vs. ~0.03% random baseline (~100x lift) |
+| Recommender | Catalog match rate raised from 3.5% to 61.7% of real listening history, and hit-rate@20 of ~3.6% vs. ~0.03% random baseline (~100x lift) |
 | Genre classifier | Keras and PyTorch both reach ~19% top-1 and ~36–37% top-3 accuracy across 114 genres (random: 0.9% / 2.6%), with macro-F1 ≈ 0.155 |
 
 ## Key takeaways
