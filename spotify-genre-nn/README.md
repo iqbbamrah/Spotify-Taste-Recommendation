@@ -1,105 +1,79 @@
 # Genre Classification, Three Ways
 
-The same neural network -- a small feedforward classifier -- implemented
-once each in raw TensorFlow, in Keras, and in PyTorch, trained on the same
-data with the same splits, so the only thing that varies is the framework
-itself. Built to actually learn the three tools, not just read about them.
+## Problem
 
-## The task
+Predict a track's genre from 13 numeric audio features (danceability, energy, loudness, tempo, key, valence, etc.), and use that task to learn TensorFlow, Keras, and PyTorch hands-on. The same small feedforward network is implemented once in each framework and trained on identical data and splits, so the only thing that varies is the framework. Reading about the frameworks doesn't build muscle memory; building the identical model three times does, and it makes the real differences between them concrete.
 
-Predict a track's genre from 13 numeric audio features (danceability,
-energy, loudness, tempo, key, valence, etc). The dataset is the public
-[Spotify Tracks Dataset](https://huggingface.co/datasets/maharshipandya/spotify-tracks-dataset)
-(also used in the companion [spotify-taste-recommender](../spotify-taste-recommender)
-project) -- 114,000 tracks, perfectly balanced across 114 genres (1,000
-tracks each). It's a real, moderately hard multi-class classification
-problem: some genres are cleanly separable from audio features alone
-(`classical` vs `death-metal`), others are nearly indistinguishable this way
-(`techno` vs `minimal-techno` vs `detroit-techno` sound different to a human
-mostly for reasons -- artist, production era, cultural context -- that
-aren't in these 13 numbers at all). Expect solid but unspectacular top-1
-accuracy and a much better top-3 accuracy; that gap is itself worth noticing.
+It's a moderately hard multi-class problem. Some genres separate cleanly on audio features alone (`classical` vs. `death-metal`); others are nearly indistinguishable this way (`techno` vs. `minimal-techno` vs. `detroit-techno` differ mostly in artist, production era, and cultural context, none of which are in these 13 numbers).
 
-## Why three implementations of the same thing
+## Data
 
-Reading about TensorFlow/PyTorch/Keras doesn't build muscle memory. Building
-the identical model three times does, and it also makes the actual
-differences between the frameworks concrete instead of abstract:
+- **Source:** the public [Spotify Tracks Dataset](https://huggingface.co/datasets/maharshipandya/spotify-tracks-dataset), also used by the companion [spotify-taste-recommender](../spotify-taste-recommender) project.
+- 114,000 tracks, perfectly balanced across **114 genres** (1,000 tracks each), with 13 numeric audio features per track.
+- **Splits:** stratified 80/10/10 train/validation/test by genre (seed 42), so every genre appears in each split. Scaling is fit on the training split only, to avoid leaking validation/test information. Splits are cached, so all three implementations train on byte-identical data.
+
+## Methodology
+
+**Architecture (identical in all three):** 13 inputs → Dense 128 + ReLU + Dropout 0.3 → Dense 64 + ReLU + Dropout 0.3 → 114 logits (17,458 parameters). Batch size 256, up to 30 epochs.
 
 | | `tensorflow_impl/` | `keras_impl/` | `pytorch_impl/` |
 |---|---|---|---|
 | Layers | hand-written (`tf.Variable`, `tf.matmul`) | `keras.layers.Dense` | `nn.Linear` |
 | Forward pass | manual Python loop over layers | built by `Sequential` | `nn.Sequential` |
 | Training loop | hand-written, `tf.GradientTape` | `model.fit(...)` | hand-written, `loss.backward()` |
-| Optimizer | hand-rolled SGD+momentum update rule | `keras.optimizers.Adam` | `torch.optim.Adam` |
-| Early stopping | not implemented (see note) | `EarlyStopping` callback | hand-written patience counter |
-| Abstraction level | lowest -- you feel every operation | highest -- describe, don't implement | middle -- objects provided, loop is yours |
+| Optimizer | hand-rolled SGD + momentum | `keras.optimizers.Adam` | `torch.optim.Adam` |
+| Early stopping | not implemented | `EarlyStopping` callback (patience 5) | hand-written patience counter (5) |
+| Abstraction level | lowest: you write every operation | highest: describe, don't implement | middle: objects provided, the loop is yours |
 
-`tensorflow_impl` is intentionally the "hard mode" version: it never touches
-`tf.keras`, so you see what a `Dense` layer, a training step, and an
-optimizer update actually *are* underneath the convenience API everyone
-normally uses (`tf.keras` is in fact where Keras itself lives when paired
-with a TensorFlow backend -- so `keras_impl/` and "using TensorFlow the easy
-way" are, in industry practice, often the same thing). `pytorch_impl` sits
-in between: PyTorch gives you real layer and optimizer objects, but never
-hides the training loop from you the way `.fit()` does.
+- `tensorflow_impl` is deliberately the "hard mode" version: it never touches `tf.keras`, so it shows what a `Dense` layer, a training step, and an optimizer update actually are underneath the convenience API.
+- **Evaluation:** a shared metrics module reports top-1 accuracy, top-3 accuracy, macro-F1, parameter count, and training time on the held-out test set; `compare.py` prints them side by side.
+- **Tools:** Python, TensorFlow, Keras, PyTorch, scikit-learn, pandas, NumPy, pytest.
 
-## Setup
+## Results
+
+Test-set results from the most recent full runs:
+
+| Framework | Top-1 accuracy | Top-3 accuracy | Macro-F1 | Parameters | Training time |
+|---|---|---|---|---|---|
+| Keras | 19.2% | 36.4% | 0.154 | 17,458 | 38 s |
+| PyTorch | 19.1% | 36.8% | 0.155 | 17,458 | 61 s |
+
+For scale, random guessing across 114 genres gives 0.9% top-1 and 2.6% top-3. The raw TensorFlow implementation's saved result is from a 2-epoch check run rather than a full 30-epoch run, so it isn't included in the comparison.
+
+## Key takeaways
+
+- **Same architecture, same data, same result:** Keras and PyTorch land within a few tenths of a point of each other on every metric, which confirms the differences between frameworks are in the developer experience, not the model.
+- **Top-1 vs. top-3 is the real finding.** Top-3 accuracy is nearly double top-1 because many genres are only separable by information that isn't in these 13 audio features. That gap is a property of the data, not a bug.
+- **Convenience hides failure modes.** In raw TensorFlow, forgetting to guard dropout with `training=True/False` silently changes train vs. eval behaviour; in PyTorch, forgetting `model.eval()` or `optimizer.zero_grad()` does the same. Keras handles both automatically, which is exactly what makes it easy to call `.fit()` without understanding what it does.
+- **Code length tracks abstraction:** model plus training code is 83 lines in Keras, 128 in PyTorch, and 153 in raw TensorFlow.
+
+## How to run
+
+From this folder:
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate      # Windows
-pip install -r requirements.txt
+.venv/Scripts/pip install -r requirements.txt
+.venv/Scripts/python -m tensorflow_impl.train
+.venv/Scripts/python -m keras_impl.train
+.venv/Scripts/python -m pytorch_impl.train
+.venv/Scripts/python compare.py
 ```
 
-## Running it
+Each trainer writes its metrics to `results/`, and `compare.py` prints whichever runs exist side by side.
 
-Each implementation is standalone and writes its results to `results/`:
-
-```bash
-python -m tensorflow_impl.train
-python -m keras_impl.train
-python -m pytorch_impl.train
-python compare.py
-```
-
-`compare.py` reads whichever `results/*_metrics.json` files exist and prints
-a side-by-side table of accuracy, top-3 accuracy, macro-F1, parameter count,
-and training time -- run any subset of the three and it'll compare just
-those.
-
-The data pipeline (`common/data.py`) is shared and cached to
-`data/processed/splits.npz` on first run, so all three trainers see byte-
-identical train/val/test splits and feature scaling -- differences in the
-results table reflect the modeling code, not different data.
-
-## What to actually pay attention to
-
-- **Line count and readability**: open all three `train.py` files side by
-  side. Keras is the shortest by a wide margin -- that's the entire point of
-  a high-level API, and also its main risk (it's easy to call `.fit()`
-  without understanding what it's doing).
-- **Where bugs are easy to introduce**: in `tensorflow_impl`, forgetting to
-  guard dropout with `training=True/False` silently changes train vs. eval
-  behavior; in raw PyTorch, forgetting `model.eval()` before evaluation (or
-  `optimizer.zero_grad()` before a backward pass) does the same. Keras
-  handles both automatically -- notice what convenience is actually buying
-  you.
-- **Top-1 vs top-3 accuracy**: a big gap between them here isn't a bug, it's
-  a real signal that many genres are only separable from each other by
-  something other than these 13 audio features.
-- **Training time vs. parameter count**: all three models have the same
-  architecture, so parameter counts should match almost exactly; training
-  time differences come from the framework/hardware path, not the model.
-
-## Project layout
+## Repo structure
 
 ```
-common/data.py        shared load/clean/split/scale pipeline (used by all three)
-common/metrics.py      shared accuracy/top-3/macro-F1 evaluation
-tensorflow_impl/       raw TensorFlow: manual layers, GradientTape, hand-rolled SGD+momentum
-keras_impl/            Keras Sequential API: model.compile()/model.fit()
-pytorch_impl/          PyTorch: nn.Module, DataLoader, manual training loop
-compare.py             prints the side-by-side results table
-tests/test_data.py     sanity checks on the shared data pipeline
+├── common/
+│   ├── data.py            # shared load / clean / split / scale pipeline (used by all three)
+│   └── metrics.py         # shared accuracy / top-3 / macro-F1 evaluation
+├── tensorflow_impl/       # raw TensorFlow: manual layers, GradientTape, hand-rolled SGD + momentum
+├── keras_impl/            # Keras Sequential API: model.compile() / model.fit()
+├── pytorch_impl/          # PyTorch: nn.Module, DataLoader, manual training loop
+├── compare.py             # prints the side-by-side results table
+├── tests/test_data.py     # sanity checks on the shared data pipeline
+├── data/raw/              # Spotify Tracks Dataset CSV
+├── requirements.txt
+└── README.md
 ```
