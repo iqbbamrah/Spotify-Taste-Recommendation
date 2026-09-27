@@ -1,6 +1,6 @@
 # Spotify Projects
 
-Two independent projects built on Spotify data, kept in one repo because they share a domain and a dataset. Each subfolder's README has the full details.
+Two projects built on Spotify data, kept in one repo because they share a domain and a dataset. Each subfolder's README has the full details.
 
 ## Problem
 
